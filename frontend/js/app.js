@@ -466,33 +466,35 @@ function initGraphNetwork() {
   const options = {
     nodes: {
       shape: 'dot',
-      size: 20,
+      size: 18,
       font: {
-        face: 'Outfit',
-        size: 13,
-        color: '#ffffff',
+        face: 'JetBrains Mono',
+        size: 12,
+        color: '#f5f5f5',
         strokeWidth: 2,
-        strokeColor: '#070913',
+        strokeColor: '#121212',
       },
       borderWidth: 2,
-      shadow: { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8 },
+      borderWidthSelected: 3,
+      shadow: false,
     },
     edges: {
       width: 1.5,
       color: {
-        color: 'rgba(255, 255, 255, 0.25)',
-        highlight: '#00f2fe',
-        hover: '#8a74f9',
+        color: '#383838',
+        highlight: '#ffffff',
+        hover: '#00f0ff',
       },
       font: {
         face: 'JetBrains Mono',
         size: 10,
-        color: 'rgba(255, 255, 255, 0.65)',
+        color: '#888888',
         strokeWidth: 0,
         align: 'middle',
       },
       arrows: { to: { enabled: true, scaleFactor: 0.5 } },
       smooth: { type: 'continuous' },
+      shadow: false,
     },
     physics: {
       enabled: true,
@@ -552,7 +554,7 @@ function renderGraphFacts(facts) {
       nodesMap.set(src, {
         id: src,
         label: src,
-        color: { background: getEntityColor('Concept'), border: '#ffffff' },
+        color: { background: getEntityColor('Concept'), border: '#000000' },
         entityType: 'Concept',
         description: `Source entity involved in relationship: ${rel}`,
       });
@@ -562,7 +564,7 @@ function renderGraphFacts(facts) {
       nodesMap.set(tgt, {
         id: tgt,
         label: tgt,
-        color: { background: getEntityColor('Organization'), border: '#ffffff' },
+        color: { background: getEntityColor('Organization'), border: '#000000' },
         entityType: 'Entity',
         description: `Target entity connected via ${rel}`,
       });
@@ -606,7 +608,7 @@ async function loadDocumentSubgraph(docId) {
     const visNodes = data.nodes.map((n) => ({
       id: n.name,
       label: n.name,
-      color: { background: getEntityColor(n.type), border: '#ffffff' },
+      color: { background: getEntityColor(n.type), border: '#000000' },
       entityType: n.type,
       description: n.description || 'No description available',
     }));
