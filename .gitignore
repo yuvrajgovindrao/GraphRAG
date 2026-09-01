@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment & Secrets
+.env
+.venv/
+venv/
+env/
+
+# Data & Local Databases
+data/raw/*
+!data/raw/.gitkeep
+data/*.db
+data/*.db*
+data/qdrant_db/
+data/qdrant_db/*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

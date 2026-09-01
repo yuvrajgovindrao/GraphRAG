@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GraphRAG — Knowledge Graph Enhanced Q&A</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- vis-network (Force-directed Graph Visualizer) -->
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+  <!-- Marked (Markdown Renderer) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- ── Left Sidebar ──────────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <div class="brand-icon">🔗</div>
+          <div>
+            <div class="brand-title">GraphRAG</div>
+            <div class="brand-subtitle">Knowledge Graph Q&A</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- Retrieval Mode Switcher -->
+        <div>
+          <div class="section-label">Retrieval Engine</div>
+          <div class="mode-toggle-group">
+            <button class="mode-btn active" id="btn-mode-graph" data-mode="graph">
+              <span>🔗</span> Graph-Enhanced
+            </button>
+            <button class="mode-btn" id="btn-mode-vector" data-mode="vector">
+              <span>📄</span> Vector-Only
+            </button>
+          </div>
+        </div>
+
+        <!-- System Health Status -->
+        <div>
+          <div class="section-label">System Health</div>
+          <div class="status-grid">
+            <div class="status-pill" title="Neo4j AuraDB Graph Database">
+              <span class="status-dot" id="dot-neo4j"></span>
+              <span>AuraDB</span>
+            </div>
+            <div class="status-pill" title="Local Embedded Qdrant Vector Engine">
+              <span class="status-dot" id="dot-qdrant"></span>
+              <span>Vector Store</span>
+            </div>
+            <div class="status-pill" title="SQLite Document Metadata">
+              <span class="status-dot" id="dot-sqlite"></span>
+              <span>Metadata</span>
+            </div>
+            <div class="status-pill" title="Active LLM Provider">
+              <span class="status-dot" id="dot-llm"></span>
+              <span id="lbl-llm">LLM</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Document Upload Dropzone -->
+        <div>
+          <div class="section-label">Upload Document</div>
+          <div class="upload-dropzone" id="dropzone">
+            <input type="file" id="file-input" accept=".pdf,.txt,.md" style="display: none;" />
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">Drop PDF or Text file here</div>
+            <div class="upload-subtext">or click to browse from device</div>
+          </div>
+        </div>
+
+        <!-- Document Library -->
+        <div>
+          <div class="section-label" style="justify-content: space-between;">
+            <span>Document Library</span>
+            <span id="doc-count" style="color: var(--accent-cyan); font-family: var(--font-mono);">0</span>
+          </div>
+          <div class="doc-list" id="doc-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main Workspace ────────────────────────────────────────────── -->
+    <main class="main-workspace">
+      
+      <!-- ── Left Column: Chat Assistant ─────────────────────────────── -->
+      <section class="chat-section">
+        <div class="chat-header">
+          <div class="chat-header-title">
+            <span>💬</span> Knowledge Assistant
+          </div>
+          <div class="chat-badge" id="active-mode-badge">MODE: GRAPH-ENHANCED</div>
+        </div>
+
+        <div class="chat-thread" id="chat-thread">
+          <!-- Initial Welcome Message -->
+          <div class="chat-message assistant">
+            <div class="chat-avatar">AI</div>
+            <div class="chat-bubble">
+              <h3>Welcome to GraphRAG! 🚀</h3>
+              <p>I combine <strong>vector similarity search</strong> with <strong>knowledge graph reasoning</strong> to answer deep questions across your documents.</p>
+              <ul style="margin-top: 8px;">
+                <li>Upload a PDF or text file on the left sidebar.</li>
+                <li>I'll extract entities & relationships automatically into <strong>Neo4j AuraDB</strong>.</li>
+                <li>Ask questions and explore multi-hop connections visually on the right!</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <form id="chat-form" class="input-box-wrapper">
+            <input 
+              type="text" 
+              id="chat-input" 
+              class="chat-input" 
+              placeholder="Ask a question about your uploaded documents..." 
+              autocomplete="off"
+            />
+            <button type="submit" id="send-btn" class="send-btn" title="Send message">
+              ➔
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ── Right Column: Interactive Knowledge Graph ───────────────── -->
+      <section class="graph-section">
+        <div class="graph-header">
+          <div class="graph-title">
+            <span>🕸️</span> Knowledge Graph Explorer
+          </div>
+          <div class="graph-controls">
+            <select id="doc-subgraph-select" class="graph-select">
+              <option value="all">Active Answer Graph</option>
+            </select>
+            <button id="btn-physics" class="graph-btn" title="Toggle Graph Physics Simulation">
+              Physics: ON
+            </button>
+            <button id="btn-fit" class="graph-btn" title="Fit View to Screen">
+              Center
+            </button>
+          </div>
+        </div>
+
+        <div class="graph-canvas-wrapper">
+          <div id="graph-network"></div>
+          
+          <div class="graph-empty-state" id="graph-empty">
+            <div class="graph-empty-icon">🕸️</div>
+            <h3>Knowledge Graph View</h3>
+            <p style="font-size: 0.82rem; margin-top: 6px;">
+              Ask a question or select a document above to explore interactive entities & relations.
+            </p>
+          </div>
+
+          <!-- Entity Detail Inspector Popup -->
+          <div class="entity-inspector" id="entity-inspector">
+            <div class="inspector-header">
+              <div class="inspector-name" id="inspector-name">Entity Name</div>
+              <div class="inspector-type" id="inspector-type">Concept</div>
+            </div>
+            <div class="inspector-desc" id="inspector-desc">
+              Entity description and details...
+            </div>
+          </div>
+        </div>
+
+        <!-- Graph Color Legend -->
+        <div class="graph-legend">
+          <div class="legend-item"><span class="legend-color" style="background: #f43f5e;"></span>Person</div>
+          <div class="legend-item"><span class="legend-color" style="background: #8a74f9;"></span>Organization</div>
+          <div class="legend-item"><span class="legend-color" style="background: #00f2fe;"></span>Concept</div>
+          <div class="legend-item"><span class="legend-color" style="background: #f59e0b;"></span>Event</div>
+          <div class="legend-item"><span class="legend-color" style="background: #10b981;"></span>Location</div>
+          <div class="legend-item"><span class="legend-color" style="background: #ff7043;"></span>Technology</div>
+          <div class="legend-item"><span class="legend-color" style="background: #a855f7;"></span>Date</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Client Application Logic -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

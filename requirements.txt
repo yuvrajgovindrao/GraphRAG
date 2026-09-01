@@ -1,0 +1,23 @@
+# Core API & Server
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic-settings
+pydantic
+
+# Database & Graph
+neo4j
+qdrant-client
+aiosqlite
+
+# Document Processing & Chunking
+PyMuPDF
+llama-index-core
+
+# LLM Providers
+google-genai
+openai
+
+# Utilities
+httpx
+python-multipart

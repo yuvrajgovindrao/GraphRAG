@@ -1,0 +1,36 @@
+{
+    "document": "example_document.pdf",
+    "description": "Evaluation questions for testing vector-only vs graph-enhanced retrieval. Replace with questions specific to your uploaded document.",
+    "questions": [
+        {
+            "question": "What is the main topic of the document?",
+            "expected_answer": "Replace with expected answer",
+            "type": "single_hop"
+        },
+        {
+            "question": "Who are the key people or organizations mentioned?",
+            "expected_answer": "Replace with expected answer",
+            "type": "single_hop"
+        },
+        {
+            "question": "What are the main findings or conclusions?",
+            "expected_answer": "Replace with expected answer",
+            "type": "single_hop"
+        },
+        {
+            "question": "How is [Entity A] related to [Entity B]?",
+            "expected_answer": "Replace with expected answer",
+            "type": "multi_hop"
+        },
+        {
+            "question": "What is the connection between [Concept X] and [Organization Y]?",
+            "expected_answer": "Replace with expected answer",
+            "type": "multi_hop"
+        },
+        {
+            "question": "Trace the chain of events from [Event A] to [Outcome B].",
+            "expected_answer": "Replace with expected answer",
+            "type": "multi_hop"
+        }
+    ]
+}
