@@ -144,6 +144,17 @@ function setupEventListeners() {
     }
   });
 
+  // Document Library Actions (Event Delegation)
+  elements.docList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.doc-btn-icon');
+    if (!btn) return;
+    const docId = btn.getAttribute('data-doc-id');
+    if (!docId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    await deleteDocument(docId);
+  });
+
   // Close entity inspector on outside click
   document.addEventListener('click', (e) => {
     if (!elements.entityInspector.contains(e.target) && !e.target.closest('#graph-network')) {
@@ -243,13 +254,13 @@ function renderDocumentList(docs) {
 
     item.innerHTML = `
       <div class="doc-info">
-        <div class="doc-name" title="${doc.filename}">${doc.filename}</div>
+        <div class="doc-name" title="${escapeHtml(doc.filename)}">${escapeHtml(doc.filename)}</div>
         <div class="doc-status ${doc.status}">
           ${statusEmojis[doc.status] || doc.status}${progressStr}
         </div>
       </div>
       <div class="doc-actions">
-        <button class="doc-btn-icon" title="Delete Document" onclick="deleteDocument('${doc.id}')">
+        <button class="doc-btn-icon" title="Delete Document" data-doc-id="${doc.id}">
           🗑️
         </button>
       </div>
@@ -309,11 +320,13 @@ async function uploadFile(file) {
 }
 
 async function deleteDocument(docId) {
-  if (!confirm('Delete this document and all its chunks/graph entities?')) return;
-
   try {
+    showToast('Deleting document and graph nodes...', 'info');
     const res = await fetch(`/documents/${docId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Deletion failed');
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Deletion failed');
+    }
     showToast('Document deleted successfully', 'success');
     await loadDocuments();
     if (elements.docSubgraphSelect.value === docId) {
@@ -324,6 +337,9 @@ async function deleteDocument(docId) {
     showToast(`Delete error: ${err.message}`, 'error');
   }
 }
+
+// Expose to window for backwards compatibility
+window.deleteDocument = deleteDocument;
 
 // ── Chat & Query Processing ────────────────────────────────────────────
 async function submitQuery(question) {
