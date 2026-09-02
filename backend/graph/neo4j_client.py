@@ -201,8 +201,10 @@ class Neo4jClient:
                 WITH DISTINCT rel, startNode(rel) AS s, endNode(rel) AS t
                 RETURN DISTINCT
                     s.name AS source_entity,
+                    coalesce(s.type, 'Concept') AS source_type,
                     rel.type AS relation,
                     t.name AS target_entity,
+                    coalesce(t.type, 'Entity') AS target_type,
                     coalesce(rel.description, '') AS description,
                     coalesce(rel.chunk_ids, []) AS source_chunk_ids
                 LIMIT $max_facts
@@ -225,21 +227,10 @@ class Neo4jClient:
             rel_count = session.run("MATCH ()-[r:RELATES_TO]->() RETURN count(r) as count").single()["count"]
             return {"entity_count": node_count, "relationship_count": rel_count}
 
-    def get_document_subgraph(self, doc_id: str, limit: int = 150) -> dict:
-        """Get the entity-relationship subgraph for a specific document."""
+    def get_document_subgraph(self, doc_id: str, limit: int = 1000) -> dict:
+        """Get the entity-relationship subgraph for a specific document with all connected nodes guaranteed."""
         with self._driver.session() as session:
-            nodes_result = session.run(
-                """
-                MATCH (e:Entity)
-                WHERE $doc_id IN e.doc_ids
-                RETURN e.name AS name, e.type AS type, coalesce(e.description, '') AS description
-                LIMIT $limit
-                """,
-                doc_id=doc_id,
-                limit=limit,
-            )
-            nodes = [dict(r) for r in nodes_result]
-
+            # 1. Fetch relationships belonging to this document
             edges_result = session.run(
                 """
                 MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
@@ -253,7 +244,83 @@ class Neo4jClient:
             )
             edges = [dict(r) for r in edges_result]
 
-            return {"nodes": nodes, "edges": edges}
+            # 2. Fetch all nodes belonging to this document
+            nodes_result = session.run(
+                """
+                MATCH (e:Entity)
+                WHERE $doc_id IN e.doc_ids
+                RETURN e.name AS name, e.type AS type, coalesce(e.description, '') AS description
+                LIMIT $limit
+                """,
+                doc_id=doc_id,
+                limit=limit,
+            )
+            nodes_dict = {r["name"]: dict(r) for r in nodes_result}
+
+            # 3. Ensure any node linked by edges is included so no edge is ever dropped in frontend
+            edge_node_names = set()
+            for e in edges:
+                edge_node_names.add(e["source"])
+                edge_node_names.add(e["target"])
+
+            missing_names = edge_node_names - set(nodes_dict.keys())
+            if missing_names:
+                missing_result = session.run(
+                    """
+                    MATCH (e:Entity)
+                    WHERE e.name IN $missing_names
+                    RETURN e.name AS name, e.type AS type, coalesce(e.description, '') AS description
+                    """,
+                    missing_names=list(missing_names),
+                )
+                for r in missing_result:
+                    nodes_dict[r["name"]] = dict(r)
+
+            return {"nodes": list(nodes_dict.values()), "edges": edges}
+
+    def get_global_subgraph(self, limit: int = 1500) -> dict:
+        """Get the entire knowledge graph across all documents with guaranteed node endpoints."""
+        with self._driver.session() as session:
+            edges_result = session.run(
+                """
+                MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
+                RETURN s.name AS source, r.type AS relation, t.name AS target,
+                       coalesce(r.description, '') AS description
+                LIMIT $limit
+                """,
+                limit=limit,
+            )
+            edges = [dict(r) for r in edges_result]
+
+            nodes_result = session.run(
+                """
+                MATCH (e:Entity)
+                RETURN e.name AS name, e.type AS type, coalesce(e.description, '') AS description
+                LIMIT $limit
+                """,
+                limit=limit,
+            )
+            nodes_dict = {r["name"]: dict(r) for r in nodes_result}
+
+            edge_node_names = set()
+            for e in edges:
+                edge_node_names.add(e["source"])
+                edge_node_names.add(e["target"])
+
+            missing_names = edge_node_names - set(nodes_dict.keys())
+            if missing_names:
+                missing_result = session.run(
+                    """
+                    MATCH (e:Entity)
+                    WHERE e.name IN $missing_names
+                    RETURN e.name AS name, e.type AS type, coalesce(e.description, '') AS description
+                    """,
+                    missing_names=list(missing_names),
+                )
+                for r in missing_result:
+                    nodes_dict[r["name"]] = dict(r)
+
+            return {"nodes": list(nodes_dict.values()), "edges": edges}
 
     def get_answer_subgraph(self, entity_names: list[str], max_hops: int = 1) -> dict:
         """

@@ -133,7 +133,7 @@ function setupEventListeners() {
   // Graph Controls
   elements.btnPhysics.addEventListener('click', togglePhysics);
   elements.btnFit.addEventListener('click', () => {
-    if (state.network) state.network.fit({ animation: { duration: 600 } });
+    centerGraph(true);
   });
   if (elements.btnExpandLayout) {
     elements.btnExpandLayout.addEventListener('click', toggleExpandedLayout);
@@ -144,6 +144,8 @@ function setupEventListeners() {
     const val = e.target.value;
     if (val === 'all') {
       renderGraphFacts(state.currentGraphFacts);
+    } else if (val === 'global') {
+      loadGlobalGraph();
     } else {
       loadDocumentSubgraph(val);
     }
@@ -277,7 +279,10 @@ function renderDocumentList(docs) {
 function updateSubgraphDropdown(docs) {
   const readyDocs = docs.filter((d) => d.status === 'ready');
   const currentVal = elements.docSubgraphSelect.value;
-  elements.docSubgraphSelect.innerHTML = '<option value="all">Active Answer Graph</option>';
+  elements.docSubgraphSelect.innerHTML = `
+    <option value="all">⚡ Active Answer Graph</option>
+    <option value="global">🌐 Full Knowledge Graph (All Documents)</option>
+  `;
 
   readyDocs.forEach((d) => {
     const opt = document.createElement('option');
@@ -536,7 +541,7 @@ function initGraphNetwork() {
         enabled: true,
         iterations: 120,
         updateInterval: 25,
-        fit: true,
+        fit: false,
       },
     },
     interaction: {
@@ -565,6 +570,16 @@ function initGraphNetwork() {
   });
 }
 
+function centerGraph(animate = true) {
+  if (!state.network) return;
+  state.network.redraw();
+  if (animate) {
+    state.network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+  } else {
+    state.network.fit({ animation: false });
+  }
+}
+
 function renderGraphFacts(facts) {
   if (!facts || facts.length === 0) {
     elements.graphEmpty.style.display = 'block';
@@ -580,16 +595,18 @@ function renderGraphFacts(facts) {
 
   facts.forEach((fact, idx) => {
     const src = fact.source_entity;
+    const srcType = fact.source_type || 'Concept';
     const tgt = fact.target_entity;
+    const tgtType = fact.target_type || 'Entity';
     const rel = fact.relation;
 
     if (!nodesMap.has(src)) {
       nodesMap.set(src, {
         id: src,
         label: src,
-        color: { background: getEntityColor('Concept'), border: '#000000' },
-        entityType: 'Concept',
-        description: `Source entity involved in relationship: ${rel}`,
+        color: { background: getEntityColor(srcType), border: '#000000' },
+        entityType: srcType,
+        description: `Source entity (${srcType}) involved in relationship: ${rel}`,
       });
     }
 
@@ -597,9 +614,9 @@ function renderGraphFacts(facts) {
       nodesMap.set(tgt, {
         id: tgt,
         label: tgt,
-        color: { background: getEntityColor('Organization'), border: '#000000' },
-        entityType: 'Entity',
-        description: `Target entity connected via ${rel}`,
+        color: { background: getEntityColor(tgtType), border: '#000000' },
+        entityType: tgtType,
+        description: `Target entity (${tgtType}) connected via: ${rel}`,
       });
     }
 
@@ -617,7 +634,53 @@ function renderGraphFacts(facts) {
   state.networkData.edges.add(edgesList);
 
   if (state.network) {
-    state.network.fit({ animation: { duration: 600 } });
+    centerGraph(true);
+  }
+}
+
+async function loadGlobalGraph() {
+  try {
+    showToast('Loading full knowledge graph (all documents)...', 'info');
+    const res = await fetch('/graph/global');
+    if (!res.ok) throw new Error('Failed to load global graph');
+    const data = await res.json();
+
+    if (!data.nodes || data.nodes.length === 0) {
+      elements.graphEmpty.style.display = 'block';
+      state.networkData.nodes.clear();
+      state.networkData.edges.clear();
+      showToast('No entities in the knowledge graph yet.', 'info');
+      return;
+    }
+
+    elements.graphEmpty.style.display = 'none';
+
+    const visNodes = data.nodes.map((n) => ({
+      id: n.name,
+      label: n.name,
+      color: { background: getEntityColor(n.type), border: '#000000' },
+      entityType: n.type,
+      description: n.description || 'No description available',
+    }));
+
+    const visEdges = data.edges.map((e, idx) => ({
+      id: `edge_g_${idx}`,
+      from: e.source,
+      to: e.target,
+      label: e.relation,
+    }));
+
+    state.networkData.nodes.clear();
+    state.networkData.edges.clear();
+    state.networkData.nodes.add(visNodes);
+    state.networkData.edges.add(visEdges);
+
+    if (state.network) {
+      centerGraph(true);
+    }
+    showToast(`Full Graph: ${visNodes.length} nodes & ${visEdges.length} relationships`, 'success');
+  } catch (err) {
+    showToast(`Global graph error: ${err.message}`, 'error');
   }
 }
 
@@ -659,8 +722,9 @@ async function loadDocumentSubgraph(docId) {
     state.networkData.edges.add(visEdges);
 
     if (state.network) {
-      state.network.fit({ animation: { duration: 600 } });
+      centerGraph(true);
     }
+    showToast(`Loaded ${visNodes.length} nodes & ${visEdges.length} relationships`, 'success');
   } catch (err) {
     showToast(`Subgraph error: ${err.message}`, 'error');
   }

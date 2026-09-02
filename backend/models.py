@@ -72,8 +72,10 @@ class SourceCitation(BaseModel):
 
 class GraphFact(BaseModel):
     source_entity: str
+    source_type: str = "Concept"
     relation: str
     target_entity: str
+    target_type: str = "Entity"
     source_chunk_ids: list[str] = []
 
 

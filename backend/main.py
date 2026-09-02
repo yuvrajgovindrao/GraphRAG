@@ -357,8 +357,16 @@ async def graph_summary():
     return neo4j_client.get_graph_summary()
 
 
+@app.get("/graph/global")
+async def global_graph(limit: int = 1500):
+    """Get the full knowledge graph across all documents."""
+    if not neo4j_client:
+        return {"nodes": [], "edges": [], "status": "Neo4j AuraDB not connected"}
+    return neo4j_client.get_global_subgraph(limit=limit)
+
+
 @app.get("/graph/document/{doc_id}")
-async def document_graph(doc_id: str, limit: int = 150):
+async def document_graph(doc_id: str, limit: int = 1000):
     """Get the entity-relationship subgraph for a document."""
     doc = await get_document(doc_id)
     if not doc:

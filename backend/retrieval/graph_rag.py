@@ -147,8 +147,10 @@ async def graph_enhanced_query(
     graph_facts = [
         GraphFact(
             source_entity=f.get("source_entity", ""),
+            source_type=f.get("source_type", "Concept"),
             relation=f.get("relation", ""),
             target_entity=f.get("target_entity", ""),
+            target_type=f.get("target_type", "Entity"),
             source_chunk_ids=f.get("source_chunk_ids", []),
         )
         for f in graph_facts_raw
