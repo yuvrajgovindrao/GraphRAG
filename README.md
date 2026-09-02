@@ -51,7 +51,7 @@ PDF / Text Upload ──► PyMuPDF Parsing ──► SentenceSplitter Chunking
 
 ```bash
 git clone https://github.com/yuvrajgovindrao/GraphRAG.git
-cd GraphRAG/graphrag-app
+cd GraphRAG
 
 # Create and activate virtual environment
 python -m venv .venv
