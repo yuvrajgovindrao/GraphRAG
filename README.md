@@ -89,15 +89,23 @@ NEO4J_PASSWORD=your_auradb_password
 
 ### 3. Run the Application
 
-#### Option A: Quick Launcher (Auto-opens browser)
-```bash
-python run.py
-```
+Start the FastAPI server directly with Uvicorn:
 
-#### Option B: Direct Uvicorn
 ```bash
 uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+> [!TIP]
+> You can also run directly without activating the virtual environment:
+> ```bash
+> .venv\Scripts\uvicorn.exe backend.main:app --reload --host 127.0.0.1 --port 8000
+> ```
+
+### 4. Open the Web Dashboard
+
+Open your browser and navigate to:
+- **Web Dashboard**: [http://localhost:8000](http://localhost:8000)
+- **Interactive API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 > [!IMPORTANT]
 > Always visit **[http://localhost:8000](http://localhost:8000)** (or **http://127.0.0.1:8000**) in your web browser.
