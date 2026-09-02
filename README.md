@@ -59,7 +59,8 @@ python -m venv .venv
 # Windows PowerShell 
 .venv\Scripts\activate
 
-if you get a script execution policy error, run this once: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+#if you get a script execution policy error,
+#First run this once: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 # Linux / macOS
 source .venv/bin/activate
