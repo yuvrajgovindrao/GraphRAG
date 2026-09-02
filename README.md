@@ -89,6 +89,14 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=your_auradb_password
 ```
 
+> [!TIP]
+> **SSL Certificate / Firewall Issue (`+s` vs `+ssc`):**
+> If you get `[SSL: CERTIFICATE_VERIFY_FAILED]` or `Unable to retrieve routing information` (common on college/office Wi-Fi, VPNs, or antivirus software with HTTPS scanning), change `neo4j+s://` to **`neo4j+ssc://`** in your `.env`:
+> ```env
+> NEO4J_URI=neo4j+ssc://<your-instance-id>.databases.neo4j.io
+> ```
+> `+ssc` enables encryption while accepting self-signed or proxy-intercepted certificates in the network chain.
+
 ### 3. Run the Application
 
 Start the FastAPI server directly with Uvicorn:
@@ -173,3 +181,16 @@ graphrag-app/
 ├── requirements.txt          # Python dependencies
 └── README.md                 # Project documentation
 ```
+
+---
+
+## ❓ Troubleshooting
+
+### Neo4j AuraDB Connection Issues
+
+| Issue | Cause | Solution |
+|---|---|---|
+| `[SSL: CERTIFICATE_VERIFY_FAILED]` or `self-signed certificate in certificate chain` | Antivirus (Bitdefender, Kaspersky, Avast) or institutional Wi-Fi intercepting SSL certificates with local certs. | Change `neo4j+s://` to **`neo4j+ssc://`** in `.env`. |
+| `Unable to retrieve routing information` | Port 7687 blocked by firewall/VPN or AuraDB instance is paused. | 1. Resume instance in [Aura Console](https://console.neo4j.io/).<br>2. Try `NEO4J_URI=bolt+ssc://<id>.databases.neo4j.io:7687`. |
+| `ModuleNotFoundError: No module named '...'` | Virtual environment not activated or packages not installed. | Run `.venv\Scripts\activate` then `pip install -r requirements.txt`. |
+
