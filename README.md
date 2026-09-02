@@ -55,8 +55,12 @@ cd GraphRAG/graphrag-app
 
 # Create and activate virtual environment
 python -m venv .venv
-.venv\Scripts\activate      # Windows
-# source .venv/bin/activate # Linux / macOS
+
+# Windows PowerShell (if you get a script execution policy error, run this once: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser)
+.venv\Scripts\activate
+
+# Linux / macOS
+source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
