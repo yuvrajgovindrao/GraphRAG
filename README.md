@@ -56,8 +56,10 @@ cd GraphRAG
 # Create and activate virtual environment
 python -m venv .venv
 
-# Windows PowerShell (if you get a script execution policy error, run this once: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser)
+# Windows PowerShell 
 .venv\Scripts\activate
+
+if you get a script execution policy error, run this once: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 # Linux / macOS
 source .venv/bin/activate
