@@ -89,11 +89,19 @@ NEO4J_PASSWORD=your_auradb_password
 
 ### 3. Run the Application
 
+#### Option A: Quick Launcher (Auto-opens browser)
 ```bash
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+python run.py
 ```
 
-Open your browser at **http://localhost:8000** to explore the dashboard and upload documents!
+#### Option B: Direct Uvicorn
+```bash
+uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+> [!IMPORTANT]
+> Always visit **[http://localhost:8000](http://localhost:8000)** (or **http://127.0.0.1:8000**) in your web browser.
+> *(Do not type `0.0.0.0` in browser address bars as browsers cannot resolve `0.0.0.0`).*
 
 ---
 
