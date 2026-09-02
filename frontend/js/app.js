@@ -54,6 +54,8 @@ const elements = {
   graphEmpty: document.getElementById('graph-empty'),
   btnPhysics: document.getElementById('btn-physics'),
   btnFit: document.getElementById('btn-fit'),
+  btnExpandLayout: document.getElementById('btn-expand-layout'),
+  mainWorkspace: document.querySelector('.main-workspace'),
   docSubgraphSelect: document.getElementById('doc-subgraph-select'),
   entityInspector: document.getElementById('entity-inspector'),
   inspectorName: document.getElementById('inspector-name'),
@@ -133,6 +135,9 @@ function setupEventListeners() {
   elements.btnFit.addEventListener('click', () => {
     if (state.network) state.network.fit({ animation: { duration: 600 } });
   });
+  if (elements.btnExpandLayout) {
+    elements.btnExpandLayout.addEventListener('click', toggleExpandedLayout);
+  }
 
   // Subgraph Selector
   elements.docSubgraphSelect.addEventListener('change', (e) => {
@@ -509,26 +514,38 @@ function initGraphNetwork() {
         align: 'middle',
       },
       arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-      smooth: { type: 'continuous' },
+      smooth: false,
       shadow: false,
     },
     physics: {
       enabled: true,
-      solver: 'forceAtlas2Based',
-      forceAtlas2Based: {
-        gravitationalConstant: -36,
-        centralGravity: 0.008,
-        springLength: 90,
-        springConstant: 0.08,
-        damping: 0.85,
+      solver: 'barnesHut',
+      barnesHut: {
+        gravitationalConstant: -3200, // Balanced node repulsion to prevent collisions
+        centralGravity: 0.35,         // Strong central gravity: Keeps unconnected nodes clustered and prevents them from drifting away
+        springLength: 100,            // Ideal link distance
+        springConstant: 0.05,         // Elastic spring force: Dragging any node pulls connected nodes smoothly with full physical tension
+        damping: 0.15,                // Fluid damping for bouncy, organic tactile movement
+        avoidOverlap: 0.25,
       },
-      stabilization: { iterations: 120 },
+      maxVelocity: 45,
+      minVelocity: 0.1,
+      timestep: 0.5,
+      adaptiveTimestep: true,
+      stabilization: {
+        enabled: true,
+        iterations: 120,
+        updateInterval: 25,
+        fit: true,
+      },
     },
     interaction: {
       hover: true,
       tooltipDelay: 150,
       zoomView: true,
       dragView: true,
+      dragNodes: true,
+      selectable: true,
     },
   };
 
@@ -665,6 +682,27 @@ function togglePhysics() {
   }
   elements.btnPhysics.textContent = `Physics: ${state.physicsEnabled ? 'ON' : 'OFF'}`;
   elements.btnPhysics.style.color = state.physicsEnabled ? 'var(--text-primary)' : 'var(--text-muted)';
+}
+
+let isExpandedLayout = false;
+
+function toggleExpandedLayout() {
+  isExpandedLayout = !isExpandedLayout;
+  if (elements.mainWorkspace) {
+    elements.mainWorkspace.classList.toggle('expanded-layout', isExpandedLayout);
+  }
+  if (elements.btnExpandLayout) {
+    elements.btnExpandLayout.innerHTML = isExpandedLayout ? '🗗 Split' : '⛶ Expand';
+    elements.btnExpandLayout.title = isExpandedLayout ? 'Restore Split Screen View' : 'Expand Assistant & Move Graph Below';
+    elements.btnExpandLayout.classList.toggle('active', isExpandedLayout);
+  }
+  // Allow DOM layout transition then redraw and fit graph to full width
+  setTimeout(() => {
+    if (state.network) {
+      state.network.redraw();
+      state.network.fit({ animation: { duration: 400 } });
+    }
+  }, 120);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
