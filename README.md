@@ -4,6 +4,7 @@ A high-performance **GraphRAG application** combining vector similarity search w
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
+[![CI](https://github.com/yuvrajgovindrao/GraphRAG/actions/workflows/ci.yml/badge.svg)](https://github.com/yuvrajgovindrao/GraphRAG/actions/workflows/ci.yml)
 ![Neo4j AuraDB](https://img.shields.io/badge/Neo4j-AuraDB_Cloud-008CC1)
 ![Qdrant](https://img.shields.io/badge/Qdrant-Embedded_Local-red)
 ![Frontend](https://img.shields.io/badge/Frontend-HTML5_CSS3_Vanilla_JS-orange)

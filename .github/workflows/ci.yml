@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Build & Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify Python Syntax & Compilation
+        run: |
+          python -m compileall backend/
+
+      - name: Verify Frontend JavaScript Syntax
+        run: |
+          node -c frontend/js/app.js
+
+      - name: Backend Architecture Smoke Test
+        run: |
+          python -c "from backend.config import get_settings; from backend.models import DocumentResponse, QueryRequest, QueryResponse; print('Architecture and models validated successfully.')"
