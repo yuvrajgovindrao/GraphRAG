@@ -1,4 +1,4 @@
-# 🔗 GraphRAG — Knowledge Graph Enhanced Q&A
+# GraphRAG — Knowledge Graph Enhanced Q&A
 
 A high-performance **GraphRAG application** combining vector similarity search with knowledge graph reasoning, powered by **Neo4j AuraDB (Cloud)**, **embedded local Qdrant**, and a **modern HTML5/CSS3/Vanilla JS web dashboard** with interactive `vis-network` physics visualization.
 
@@ -13,19 +13,19 @@ A high-performance **GraphRAG application** combining vector similarity search w
 
 <img width="1919" height="990" alt="Screenshot 2026-09-03 141820" src="https://github.com/user-attachments/assets/910071b3-c7c4-4e40-a98a-b0ba29330984" />
 
-## 🏛️ System Architecture
+## System Architecture
 
 GraphRAG couples dense vector semantic search with structured knowledge graph traversal in a clean, modular architecture.
 
 ```mermaid
 flowchart TD
-    subgraph Client["🖥️ Web Client"]
+    subgraph Client[" Web Client"]
         UI["Web Dashboard\n(HTML5 / CSS3 / Vanilla JS)"]
         VIS["Interactive Graph Canvas\n(vis-network Physics)"]
         UI <--> VIS
     end
 
-    subgraph Server["⚡ FastAPI Backend"]
+    subgraph Server[" FastAPI Backend"]
         API["API Controller\n(/upload, /query, /graph, /documents)"]
         QUEUE["Background Worker Queue\n(asyncio.Semaphore = 1)"]
         RAG["Hybrid Graph-RAG Engine\n(Vector Search + Graph Traversal)"]
@@ -33,7 +33,7 @@ flowchart TD
         API <--> RAG
     end
 
-    subgraph Data["💾 Storage & AI"]
+    subgraph Data[" Storage & AI"]
         SQLITE[("SQLite\n(Metadata & Progress)")]
         QDRANT[("Qdrant\n(Dense Vectors)")]
         NEO4J[("Neo4j AuraDB\n(Knowledge Graph)")]
@@ -52,51 +52,51 @@ flowchart TD
 
 ---
 
-## 🔄 End-to-End Workflow Flowchart
+## End-to-End Workflow Flowchart
 
 The system runs on two unified pipelines: **Document Ingestion** and **Balanced Hybrid Retrieval**.
 
 ```mermaid
 flowchart TD
-    subgraph Ingestion["📥 1. Ingestion Pipeline"]
-        A["📄 Upload Files (.pdf, .txt, .md)"] --> B["✂️ Page-Safe Parsing & Chunking"]
-        B --> C[("🎯 Qdrant (Dense Vectors)")]
-        B --> D["🧠 Extract Entities & Relations (LLM)"]
-        D --> E["🧬 Entity Resolution & Deduplication"]
-        E --> F[("🌐 Neo4j AuraDB (Knowledge Graph)")]
+    subgraph Ingestion[" 1. Ingestion Pipeline"]
+        A["📄 Upload Files (.pdf, .txt, .md)"] --> B[" Page-Safe Parsing & Chunking"]
+        B --> C[(" Qdrant (Dense Vectors)")]
+        B --> D[" Extract Entities & Relations (LLM)"]
+        D --> E[" Entity Resolution & Deduplication"]
+        E --> F[(" Neo4j AuraDB (Knowledge Graph)")]
     end
 
-    subgraph Retrieval["🔍 2. Hybrid Retrieval Pipeline"]
-        Q["💬 User Question"] --> V["🎯 Vector Search (Top-K Chunks)"]
-        Q --> G["🌐 Graph Traversal (Multi-Doc Expansion)"]
+    subgraph Retrieval[" 2. Hybrid Retrieval Pipeline"]
+        Q[" User Question"] --> V[" Vector Search (Top-K Chunks)"]
+        Q --> G[" Graph Traversal (Multi-Doc Expansion)"]
         C -.-> V
         F -.-> G
-        V --> H["🧩 Hybrid Context Synthesis"]
+        V --> H[" Hybrid Context Synthesis"]
         G --> H
-        H --> AGI["🧠 Grounded LLM Generation"]
+        H --> AGI[" Grounded LLM Generation"]
     end
 
-    AGI --> Out["✅ Grounded Answer + Citations + Interactive Graph"]
+    AGI --> Out[" Grounded Answer + Citations + Interactive Graph"]
 ```
 
 ---
 
-## ✨ Recent Updates & Changelog
+##  Recent Updates & Changelog
 
-- **🚀 Multi-File Batch Upload**: Select or drag-and-drop multiple `.pdf`, `.txt`, and `.md` files simultaneously. All files are enqueued and displayed immediately with individual status cards.
-- **📊 Real-Time Chunk Counter & Live Progress Bars**:
+- **Multi-File Batch Upload**: Select or drag-and-drop multiple `.pdf`, `.txt`, and `.md` files simultaneously. All files are enqueued and displayed immediately with individual status cards.
+- **Real-Time Chunk Counter & Live Progress Bars**:
   - Document Library header badge shows total document and chunk counts across the library (`X docs · Y chunks`).
-  - Active progress tracks display real-time status: `⏳ Parsing` (indeterminate animation) → `🔍 Extracting KG` (live `X/Y chunks (Z%)` counter) → `✅ Ready` (final chunk count badge).
-- **🛡️ Fault-Tolerant Pipeline Concurrency (`asyncio.Semaphore`)**:
+  - Active progress tracks display real-time status: `⏳ Parsing` (indeterminate animation) → `Extracting KG` (live `X/Y chunks (Z%)` counter) → ` Ready` (final chunk count badge).
+- **Fault-Tolerant Pipeline Concurrency (`asyncio.Semaphore`)**:
   - Background ingestion worker processes documents sequentially, eliminating Gemini API `429 RESOURCE_EXHAUSTED` rate limits and SQLite database write locks.
   - Per-page parser resilience catches corrupted PDF pages individually without failing the overall document.
-- **⚖️ Balanced Multi-Document Graph Expansion**:
+- **Balanced Multi-Document Graph Expansion**:
   - Solved knowledge graph starvation on cross-document compound questions.
   - Integrated `find_entities_by_chunk_ids()` and Neo4j 5 `CALL (start) { ... }` subqueries to guarantee that every document retrieved by vector search receives an equal, rich share of graph facts and nodes on the canvas.
-- **🌐 Full Cross-Document Knowledge Graph (`/graph/global`)**:
+- **Full Cross-Document Knowledge Graph (`/graph/global`)**:
   - Added dedicated endpoint and dropdown selector to explore the entire connected knowledge graph across all uploaded documents.
   - Guaranteed endpoint integrity ensures 100% of relationship source/target nodes are rendered with zero broken links.
-- **🎨 Visual Graph & Layout Polish**:
+- **Visual Graph & Layout Polish**:
   - **Expandable Square View**: "Expand Graph" button switches to a full-width `95vh` square layout for wide-canvas graph exploration.
   - **Stable Centering**: View initializes centered upon render; removed delayed snap-back auto-fits.
   - **Standardized Header Heights**: Unified all panel headers to `62px`.
@@ -104,7 +104,7 @@ flowchart TD
 
 ---
 
-## ⚡ Features
+## Features
 
 - **Zero-Docker Architecture**: Vector search runs in-process via embedded Qdrant (`data/qdrant_db`) and Knowledge Graph connects to Neo4j AuraDB Cloud.
 - **Multi-File Batch Upload & Live Progress**: Select or drag-and-drop multiple documents simultaneously with live extraction progress bars, chunk counts, and status tracking.
@@ -118,7 +118,7 @@ flowchart TD
 
 ---
 
-## 🛠️ Quick Start
+## Quick Start
 
 ### 1. Clone & Setup
 
@@ -203,7 +203,7 @@ pytest -v
 
 ---
 
-## 📖 API Endpoints
+##  API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -222,7 +222,7 @@ pytest -v
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 graphrag-app/
@@ -267,7 +267,7 @@ graphrag-app/
 
 ---
 
-## ❓ Troubleshooting
+## Troubleshooting
 
 ### Neo4j AuraDB Connection Issues
 

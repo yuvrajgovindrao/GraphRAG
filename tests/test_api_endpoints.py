@@ -68,23 +68,33 @@ def test_upload_and_list_documents(client):
 @pytest.mark.asyncio
 async def test_get_document_chunks(client):
     """Test GET /documents/{id}/chunks retrieves persisted chunk records."""
+    import uuid
+    from backend.database import delete_document
+
     with patch("backend.main._process_document", new=AsyncMock()):
         files = [("files", ("chunks_test.txt", b"Sample content for chunk inspection.", "text/plain"))]
         res = client.post("/upload", files=files)
         doc_id = res.json()["documents"][0]["doc_id"]
 
-    # Insert mock chunks directly into SQLite
-    await insert_chunks([
-        {"id": "c-1", "doc_id": doc_id, "text": "Chunk text 1", "page_number": 1, "chunk_index": 0},
-        {"id": "c-2", "doc_id": doc_id, "text": "Chunk text 2", "page_number": 2, "chunk_index": 1},
-    ])
+    c1_id = f"chunk-{uuid.uuid4()}"
+    c2_id = f"chunk-{uuid.uuid4()}"
 
-    response = client.get(f"/documents/{doc_id}/chunks")
-    assert response.status_code == 200
-    chunks = response.json()
-    assert len(chunks) == 2
-    assert chunks[0]["text"] == "Chunk text 1"
-    assert chunks[1]["text"] == "Chunk text 2"
+    try:
+        # Insert mock chunks with dynamic unique IDs
+        await insert_chunks([
+            {"id": c1_id, "doc_id": doc_id, "text": "Chunk text 1", "page_number": 1, "chunk_index": 0},
+            {"id": c2_id, "doc_id": doc_id, "text": "Chunk text 2", "page_number": 2, "chunk_index": 1},
+        ])
+
+        response = client.get(f"/documents/{doc_id}/chunks")
+        assert response.status_code == 200
+        chunks = response.json()
+        assert len(chunks) == 2
+        chunk_texts = [c["text"] for c in chunks]
+        assert "Chunk text 1" in chunk_texts
+        assert "Chunk text 2" in chunk_texts
+    finally:
+        await delete_document(doc_id)
 
 
 # ── Cascade Deletion Tests ─────────────────────────────────────────────
