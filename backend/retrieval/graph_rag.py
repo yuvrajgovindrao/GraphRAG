@@ -115,9 +115,13 @@ async def graph_enhanced_query(
     # Step 1: Vector search for passages
     vector_results = await search_similar(qdrant_client, llm, question, top_k=top_k)
 
-    # Step 2: Find seed entities and expand graph
-    seed_entities = await find_seed_entities(question, llm, neo4j, qdrant_client)
-    graph_facts_raw = get_graph_context(neo4j, seed_entities, max_hops=max_hops)
+    # Step 2: Find seed entities (from both question and retrieved passages) and expand graph
+    seed_entities = await find_seed_entities(
+        question, llm, neo4j, qdrant_client, vector_results=vector_results
+    )
+    graph_facts_raw = get_graph_context(
+        neo4j, seed_entities, max_hops=max_hops, max_facts=45, vector_results=vector_results
+    )
 
     # Step 3: Build hybrid prompt
     passages = _format_passages(vector_results)

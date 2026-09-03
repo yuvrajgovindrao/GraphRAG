@@ -179,12 +179,35 @@ class Neo4jClient:
             )
             return [dict(record) for record in result]
 
+    def find_entities_by_chunk_ids(self, chunk_ids: list[str], limit: int = 30) -> list[dict]:
+        """Find entities directly associated with a list of chunk IDs."""
+        if not chunk_ids:
+            return []
+
+        with self._driver.session() as session:
+            result = session.run(
+                """
+                UNWIND $chunk_ids AS cid
+                MATCH (e:Entity)
+                WHERE cid IN e.chunk_ids
+                RETURN DISTINCT e.name AS name, coalesce(e.type, 'Entity') AS type, e.doc_ids AS doc_ids
+                LIMIT $limit
+                """,
+                chunk_ids=chunk_ids,
+                limit=limit,
+            )
+            return [dict(record) for record in result]
+
     def expand_from_entities(
-        self, entity_names: list[str], max_hops: int = 2, max_facts: int = 25
+        self,
+        entity_names: list[str],
+        max_hops: int = 2,
+        max_facts: int = 45,
+        per_seed_limit: int = 10,
     ) -> list[dict]:
         """
-        Traverse the graph bidirectionally from seed entities, collecting relationships.
-        Returns structured facts for context injection.
+        Traverse the graph bidirectionally from seed entities with balanced per-seed quotas.
+        Ensures multiple topics or documents are not starved by one highly-connected entity.
         """
         if not entity_names:
             return []
@@ -195,27 +218,39 @@ class Neo4jClient:
                 UNWIND $names AS seed_name
                 MATCH (start:Entity)
                 WHERE toLower(start.name) CONTAINS toLower(seed_name) OR toLower(seed_name) CONTAINS toLower(start.name)
-                MATCH path = (start)-[r:RELATES_TO*1..""" + str(max_hops) + """]-(end:Entity)
-                WITH relationships(path) AS rels
-                UNWIND rels AS rel
-                WITH DISTINCT rel, startNode(rel) AS s, endNode(rel) AS t
+                CALL (start) {
+                    MATCH path = (start)-[r:RELATES_TO*1..""" + str(max_hops) + """]-(end:Entity)
+                    WITH relationships(path) AS rels
+                    UNWIND rels AS rel
+                    WITH DISTINCT rel, startNode(rel) AS s, endNode(rel) AS t
+                    RETURN DISTINCT
+                        s.name AS source_entity,
+                        coalesce(s.type, 'Concept') AS source_type,
+                        rel.type AS relation,
+                        t.name AS target_entity,
+                        coalesce(t.type, 'Entity') AS target_type,
+                        coalesce(rel.description, '') AS description,
+                        coalesce(rel.chunk_ids, []) AS source_chunk_ids
+                    LIMIT $per_seed_limit
+                }
                 RETURN DISTINCT
-                    s.name AS source_entity,
-                    coalesce(s.type, 'Concept') AS source_type,
-                    rel.type AS relation,
-                    t.name AS target_entity,
-                    coalesce(t.type, 'Entity') AS target_type,
-                    coalesce(rel.description, '') AS description,
-                    coalesce(rel.chunk_ids, []) AS source_chunk_ids
+                    source_entity,
+                    source_type,
+                    relation,
+                    target_entity,
+                    target_type,
+                    description,
+                    source_chunk_ids
                 LIMIT $max_facts
                 """,
                 names=entity_names,
                 max_facts=max_facts,
+                per_seed_limit=per_seed_limit,
             )
             facts = [dict(record) for record in result]
 
             logger.info(
-                "Bidirectional graph expansion from %d seed entities → %d facts",
+                "Balanced bidirectional graph expansion from %d seed entities → %d facts",
                 len(entity_names), len(facts),
             )
             return facts

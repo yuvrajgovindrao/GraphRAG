@@ -46,6 +46,7 @@ const elements = {
   fileInput: document.getElementById('file-input'),
   docList: document.getElementById('doc-list'),
   docCount: document.getElementById('doc-count'),
+  chunkCount: document.getElementById('chunk-count'),
   chatThread: document.getElementById('chat-thread'),
   chatForm: document.getElementById('chat-form'),
   chatInput: document.getElementById('chat-input'),
@@ -87,11 +88,10 @@ document.addEventListener('DOMContentLoaded', () => {
   checkHealth();
   loadDocuments();
 
-  // Poll system health and active document processing every 4 seconds
-  setInterval(() => {
-    checkHealth();
-    pollProcessingDocs();
-  }, 4000);
+  // Health check every 4 seconds
+  setInterval(checkHealth, 4000);
+  // Live progress polling every 1.5 seconds for snappy chunk progress updates
+  setInterval(pollProcessingDocs, 1500);
 });
 
 // ── Event Listeners ────────────────────────────────────────────────────
@@ -100,10 +100,13 @@ function setupEventListeners() {
   elements.btnModeGraph.addEventListener('click', () => setRetrievalMode('graph'));
   elements.btnModeVector.addEventListener('click', () => setRetrievalMode('vector'));
 
-  // Drag & Drop Upload
+  // Drag & Drop Multiple Files Upload
   elements.dropzone.addEventListener('click', () => elements.fileInput.click());
   elements.fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) uploadFile(e.target.files[0]);
+    if (e.target.files.length > 0) {
+      uploadFiles(Array.from(e.target.files));
+      elements.fileInput.value = '';
+    }
   });
 
   elements.dropzone.addEventListener('dragover', (e) => {
@@ -119,7 +122,7 @@ function setupEventListeners() {
     e.preventDefault();
     elements.dropzone.classList.remove('dragover');
     if (e.dataTransfer.files.length > 0) {
-      uploadFile(e.dataTransfer.files[0]);
+      uploadFiles(Array.from(e.dataTransfer.files));
     }
   });
 
@@ -230,7 +233,11 @@ async function loadDocuments() {
 }
 
 function renderDocumentList(docs) {
+  const totalChunks = docs.reduce((acc, d) => acc + (d.total_chunks || 0), 0);
   elements.docCount.textContent = docs.length;
+  if (elements.chunkCount) {
+    elements.chunkCount.textContent = totalChunks;
+  }
   elements.docList.innerHTML = '';
 
   if (docs.length === 0) {
@@ -244,12 +251,33 @@ function renderDocumentList(docs) {
   docs.forEach((doc) => {
     const item = document.createElement('div');
     item.className = 'doc-item';
-    
-    let progressStr = '';
-    if (doc.status === 'processing' || doc.status === 'extracting') {
+
+    const isProcessing = doc.status === 'processing' || doc.status === 'extracting';
+    let progressPercent = 0;
+    let progressHtml = '';
+    let chunkTagHtml = '';
+
+    if (isProcessing) {
       if (doc.total_chunks > 0) {
-        progressStr = ` (${doc.processed_chunks}/${doc.total_chunks} chunks)`;
+        progressPercent = Math.min(100, Math.max(5, Math.round((doc.processed_chunks / doc.total_chunks) * 100)));
+        progressHtml = `
+          <div class="doc-progress-track" title="${doc.processed_chunks}/${doc.total_chunks} chunks (${progressPercent}%)">
+            <div class="doc-progress-fill ${doc.status}" style="width: ${progressPercent}%;"></div>
+          </div>
+        `;
+        chunkTagHtml = `<span class="doc-chunk-tag">${doc.processed_chunks}/${doc.total_chunks} (${progressPercent}%)</span>`;
+      } else {
+        progressHtml = `
+          <div class="doc-progress-track">
+            <div class="doc-progress-fill indeterminate"></div>
+          </div>
+        `;
+        chunkTagHtml = `<span class="doc-chunk-tag">parsing...</span>`;
       }
+    } else if (doc.status === 'ready') {
+      chunkTagHtml = `<span class="doc-chunk-tag">${doc.total_chunks || 0} chunks</span>`;
+    } else if (doc.status === 'failed') {
+      chunkTagHtml = `<span class="doc-chunk-tag" style="color: var(--accent-red);" title="${escapeHtml(doc.error_message || 'Processing failed')}">error</span>`;
     }
 
     const statusEmojis = {
@@ -260,17 +288,21 @@ function renderDocumentList(docs) {
     };
 
     item.innerHTML = `
-      <div class="doc-info">
-        <div class="doc-name" title="${escapeHtml(doc.filename)}">${escapeHtml(doc.filename)}</div>
-        <div class="doc-status ${doc.status}">
-          ${statusEmojis[doc.status] || doc.status}${progressStr}
+      <div class="doc-item-main">
+        <div class="doc-info">
+          <div class="doc-name" title="${escapeHtml(doc.filename)}">${escapeHtml(doc.filename)}</div>
+          <div class="doc-status-line">
+            <span class="doc-status ${doc.status}">${statusEmojis[doc.status] || doc.status}</span>
+            ${chunkTagHtml}
+          </div>
+        </div>
+        <div class="doc-actions">
+          <button class="doc-btn-icon" title="Delete Document" data-doc-id="${doc.id}">
+            🗑️
+          </button>
         </div>
       </div>
-      <div class="doc-actions">
-        <button class="doc-btn-icon" title="Delete Document" data-doc-id="${doc.id}">
-          🗑️
-        </button>
-      </div>
+      ${progressHtml}
     `;
     elements.docList.appendChild(item);
   });
@@ -305,11 +337,26 @@ async function pollProcessingDocs() {
   }
 }
 
-async function uploadFile(file) {
-  const formData = new FormData();
-  formData.append('file', file);
+async function uploadFiles(files) {
+  if (!files || files.length === 0) return;
 
-  showToast(`Uploading ${file.name}...`, 'info');
+  const validFiles = files.filter((f) => {
+    const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+    return ['.pdf', '.txt', '.text', '.md'].includes(ext);
+  });
+
+  if (validFiles.length === 0) {
+    showToast('Only PDF, TXT, and MD files are supported.', 'error');
+    return;
+  }
+
+  const count = validFiles.length;
+  showToast(`Uploading ${count} file${count > 1 ? 's' : ''}...`, 'info');
+
+  const formData = new FormData();
+  for (const f of validFiles) {
+    formData.append('files', f);
+  }
 
   try {
     const res = await fetch('/upload', {
@@ -321,13 +368,16 @@ async function uploadFile(file) {
       throw new Error(err.detail || 'Upload failed');
     }
     const data = await res.json();
-    showToast(`Uploaded ${data.filename}! Processing started...`, 'success');
-    elements.fileInput.value = '';
+    const queuedCount = data.total || count;
+    showToast(`Queued ${queuedCount} file${queuedCount > 1 ? 's' : ''} for processing!`, 'success');
     await loadDocuments();
   } catch (err) {
     showToast(`Upload error: ${err.message}`, 'error');
   }
 }
+
+// Backwards compatibility alias
+window.uploadFile = (file) => uploadFiles([file]);
 
 async function deleteDocument(docId) {
   try {
@@ -373,8 +423,14 @@ async function submitQuery(question) {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Query failed');
+      let errorDetail = '';
+      try {
+        const err = await res.json();
+        errorDetail = err.detail || err.message || (typeof err === 'string' ? err : JSON.stringify(err));
+      } catch {
+        errorDetail = (await res.text()) || res.statusText || `Server error (HTTP ${res.status})`;
+      }
+      throw new Error(errorDetail || 'Query failed');
     }
 
     const data = await res.json();

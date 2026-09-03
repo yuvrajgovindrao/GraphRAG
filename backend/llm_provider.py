@@ -8,6 +8,7 @@ Fully non-blocking asynchronous implementation.
 from __future__ import annotations
 
 import json
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 
@@ -59,15 +60,35 @@ class GeminiProvider(BaseLLMProvider):
         batch_size = 100
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            response = await self._client.aio.models.embed_content(
-                model=self._embed_model,
-                contents=batch,
-                config=types.EmbedContentConfig(
-                    output_dimensionality=self._dim,
-                ),
-            )
-            for emb in response.embeddings:
-                results.append(emb.values)
+            max_retries = 3
+            last_err = None
+            for attempt in range(max_retries):
+                try:
+                    response = await self._client.aio.models.embed_content(
+                        model=self._embed_model,
+                        contents=batch,
+                        config=types.EmbedContentConfig(
+                            output_dimensionality=self._dim,
+                        ),
+                    )
+                    for emb in response.embeddings:
+                        results.append(emb.values)
+                    last_err = None
+                    break
+                except Exception as e:
+                    last_err = e
+                    err_str = str(e)
+                    if ("429" in err_str or "RESOURCE_EXHAUSTED" in err_str) and attempt < max_retries - 1:
+                        wait_time = 4 * (attempt + 1)
+                        logger.warning(
+                            "Gemini embed rate limit (429) encountered. Retrying in %ds (attempt %d/%d)...",
+                            wait_time, attempt + 1, max_retries,
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        raise e
+            if last_err:
+                raise last_err
         return results
 
     async def generate(self, prompt: str, system_prompt: str = "") -> str:

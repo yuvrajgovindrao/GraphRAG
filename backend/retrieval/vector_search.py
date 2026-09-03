@@ -125,6 +125,7 @@ async def search_similar(
     return [
         {
             "chunk_id": str(hit.id),
+            "doc_id": hit.payload.get("doc_id", ""),
             "text": hit.payload.get("text", ""),
             "filename": hit.payload.get("filename", ""),
             "page_number": hit.payload.get("page_number"),

@@ -54,10 +54,14 @@ def parse_pdf(file_path: Path) -> ParsedDocument:
 
     with pymupdf.open(str(file_path)) as doc:
         for page_num, page in enumerate(doc, start=1):
-            raw_text = page.get_text("text")
-            cleaned = _clean_text(raw_text)
-            if cleaned:
-                pages.append(PageText(page_number=page_num, text=cleaned))
+            try:
+                raw_text = page.get_text("text")
+                cleaned = _clean_text(raw_text)
+                if cleaned:
+                    pages.append(PageText(page_number=page_num, text=cleaned))
+            except Exception as e:
+                # Log page error but keep parsing remaining pages
+                continue
 
     return ParsedDocument(filename=file_path.name, pages=pages)
 

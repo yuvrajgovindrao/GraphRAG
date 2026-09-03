@@ -7,6 +7,7 @@ Serves both REST API and modern HTML/CSS/JS web dashboard.
 from __future__ import annotations
 
 import uuid
+import asyncio
 import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -166,110 +167,154 @@ async def health_check():
     return result
 
 
-# ── Document Upload ────────────────────────────────────────────────────
+# ── Document Upload & Concurrency Control ──────────────────────────────
+# Global processing semaphore: processes documents one by one in the background.
+# This prevents Gemini LLM 429 quota exhaustion, SQLite database lock conflicts,
+# and ensures multi-file uploads process reliably without crashing.
+_DOC_PIPELINE_SEMAPHORE = asyncio.Semaphore(1)
+
 
 async def _process_document(doc_id: str, file_path: Path, filename: str):
-    """Background task: parse → chunk → embed → extract → store graph."""
-    try:
-        # Step 1: Parse document
-        logger.info("Parsing document: %s", filename)
-        parsed = parse_document(file_path)
-        if not parsed.pages:
-            await update_document_status(doc_id, "failed", error_message="No text content found in document")
-            return
+    """Background task: parse → chunk → embed → extract → store graph with concurrency control."""
+    async with _DOC_PIPELINE_SEMAPHORE:
+        try:
+            logger.info("Starting processing pipeline for: %s (doc_id=%s)", filename, doc_id)
+            await update_document_status(doc_id, "processing", processed_chunks=0)
 
-        # Step 2: Chunk
-        chunks = chunk_document(parsed, doc_id)
-        chunk_dicts = [c.to_dict() for c in chunks]
-        await insert_chunks(chunk_dicts)
-        await update_document_status(doc_id, "processing", total_chunks=len(chunks))
-        logger.info("Created %d chunks for %s", len(chunks), filename)
+            # Step 1: Parse document
+            parsed = parse_document(file_path)
+            if not parsed.pages or not parsed.full_text.strip():
+                await update_document_status(
+                    doc_id, "failed", error_message="No readable text found in document"
+                )
+                return
 
-        # Step 3: Embed and index in Qdrant
-        if qdrant and llm:
-            chunk_data_for_index = [
-                {
-                    "id": c.id,
-                    "doc_id": c.doc_id,
-                    "text": c.text,
-                    "page_number": c.page_number,
-                    "chunk_index": c.chunk_index,
-                    "source_filename": c.source_filename,
-                }
-                for c in chunks
-            ]
-            await index_chunks(qdrant, llm, chunk_data_for_index)
-            logger.info("Indexed %d chunks in Qdrant for %s", len(chunks), filename)
+            # Step 2: Chunk
+            chunks = chunk_document(parsed, doc_id)
+            if not chunks:
+                await update_document_status(
+                    doc_id, "failed", error_message="Failed to split text into chunks"
+                )
+                return
 
-        # Step 4: Extract entities and relationships
-        await update_document_status(doc_id, "extracting")
-
-        async def on_progress(processed: int, total: int):
+            chunk_dicts = [c.to_dict() for c in chunks]
+            await insert_chunks(chunk_dicts)
             await update_document_status(
-                doc_id, "extracting", processed_chunks=processed
+                doc_id, "processing", total_chunks=len(chunks), processed_chunks=0
+            )
+            logger.info("Created %d chunks for %s", len(chunks), filename)
+
+            # Step 3: Embed and index in Qdrant
+            if qdrant and llm:
+                chunk_data_for_index = [
+                    {
+                        "id": c.id,
+                        "doc_id": c.doc_id,
+                        "text": c.text,
+                        "page_number": c.page_number,
+                        "chunk_index": c.chunk_index,
+                        "source_filename": c.source_filename,
+                    }
+                    for c in chunks
+                ]
+                await index_chunks(qdrant, llm, chunk_data_for_index)
+                logger.info("Indexed %d chunks in Qdrant for %s", len(chunks), filename)
+
+            # Step 4: Extract entities and relationships
+            await update_document_status(
+                doc_id, "extracting", total_chunks=len(chunks), processed_chunks=0
             )
 
-        if llm:
-            extraction_results = await extract_from_chunks(
-                llm,
-                [{"id": c.id, "text": c.text} for c in chunks],
-                on_progress=on_progress,
+            async def on_progress(processed: int, total: int):
+                await update_document_status(
+                    doc_id, "extracting", total_chunks=total, processed_chunks=processed
+                )
+
+            if llm:
+                extraction_results = await extract_from_chunks(
+                    llm,
+                    [{"id": c.id, "text": c.text} for c in chunks],
+                    on_progress=on_progress,
+                )
+
+                # Step 5: Entity resolution
+                resolved_entities, resolved_relationships = resolve_entities(extraction_results)
+
+                # Step 6: Write to Neo4j
+                if neo4j_client:
+                    neo4j_client.merge_entities(resolved_entities, doc_id)
+                    neo4j_client.create_relationships(resolved_relationships, doc_id)
+                    logger.info("Entities & relations saved to Neo4j AuraDB for %s", filename)
+                else:
+                    logger.warning("Neo4j client not connected, skipping graph database write")
+
+            await update_document_status(
+                doc_id, "ready",
+                total_chunks=len(chunks),
+                processed_chunks=len(chunks),
             )
+            logger.info("Document processing complete: %s (%d chunks)", filename, len(chunks))
 
-            # Step 5: Entity resolution
-            resolved_entities, resolved_relationships = resolve_entities(extraction_results)
-
-            # Step 6: Write to Neo4j
-            if neo4j_client:
-                neo4j_client.merge_entities(resolved_entities, doc_id)
-                neo4j_client.create_relationships(resolved_relationships, doc_id)
-                logger.info("Entities & relations saved to Neo4j AuraDB for %s", filename)
-            else:
-                logger.warning("Neo4j client not connected, skipping graph database write")
-
-        await update_document_status(
-            doc_id, "ready",
-            total_chunks=len(chunks),
-            processed_chunks=len(chunks),
-        )
-        logger.info("Document processing complete: %s", filename)
-
-    except Exception as e:
-        logger.exception("Failed to process document %s: %s", filename, str(e))
-        await update_document_status(doc_id, "failed", error_message=str(e))
+        except Exception as e:
+            logger.exception("Failed to process document %s: %s", filename, str(e))
+            await update_document_status(doc_id, "failed", error_message=str(e))
 
 
-@app.post("/upload", response_model=UploadResponse)
-async def upload_document(
+@app.post("/upload")
+async def upload_documents(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(default=[]),
+    file: UploadFile | None = File(default=None),
 ):
-    """Upload a PDF or text file for processing."""
-    # Validate file type
-    filename = file.filename or "unknown"
-    suffix = Path(filename).suffix.lower()
-    if suffix not in (".pdf", ".txt", ".text", ".md"):
+    """Upload one or multiple PDF, TXT, or MD files for background processing."""
+    upload_list = list(files)
+    if file is not None:
+        upload_list.append(file)
+
+    if not upload_list:
+        raise HTTPException(status_code=400, detail="No files provided for upload.")
+
+    settings = get_settings()
+    uploaded_results = []
+
+    for f in upload_list:
+        filename = f.filename or "unknown"
+        suffix = Path(filename).suffix.lower()
+        if suffix not in (".pdf", ".txt", ".text", ".md"):
+            logger.warning("Skipping unsupported file %s (suffix: %s)", filename, suffix)
+            continue
+
+        # Save file to disk
+        doc_id = str(uuid.uuid4())
+        file_path = settings.data_dir / f"{doc_id}_{filename}"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        content = await f.read()
+        file_path.write_bytes(content)
+
+        # Create document record in SQLite
+        await insert_document(doc_id, filename, suffix.lstrip("."))
+
+        # Queue background processing pipeline
+        background_tasks.add_task(_process_document, doc_id, file_path, filename)
+
+        uploaded_results.append({
+            "doc_id": doc_id,
+            "filename": filename,
+            "message": "Document queued for processing."
+        })
+
+    if not uploaded_results:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type: {suffix}. Supported: .pdf, .txt, .md",
+            detail="None of the uploaded files are supported. Supported formats: .pdf, .txt, .md",
         )
 
-    # Save file
-    doc_id = str(uuid.uuid4())
-    settings = get_settings()
-    file_path = settings.data_dir / f"{doc_id}_{filename}"
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    content = await file.read()
-    file_path.write_bytes(content)
-
-    # Create document record
-    await insert_document(doc_id, filename, suffix.lstrip("."))
-
-    # Start background processing
-    background_tasks.add_task(_process_document, doc_id, file_path, filename)
-
-    return UploadResponse(doc_id=doc_id, filename=filename)
+    return {
+        "documents": uploaded_results,
+        "total": len(uploaded_results),
+        "message": f"Successfully queued {len(uploaded_results)} document(s) for processing.",
+    }
 
 
 # ── Documents ──────────────────────────────────────────────────────────
@@ -386,31 +431,46 @@ async def query_documents(request: QueryRequest):
             status_code=503,
             detail="Services not ready. Ensure LLM API key and vector store are configured.",
         )
-    if request.mode == QueryMode.VECTOR:
-        return await vector_only_query(
-            question=request.question,
-            llm=llm,
-            qdrant_client=qdrant,
-            top_k=request.top_k,
-        )
-    else:
-        if not neo4j_client:
-            # Fallback to vector search if Neo4j is not connected
-            logger.info("Neo4j not connected, falling back to vector query")
+    try:
+        if request.mode == QueryMode.VECTOR:
             return await vector_only_query(
                 question=request.question,
                 llm=llm,
                 qdrant_client=qdrant,
                 top_k=request.top_k,
             )
-        response = await graph_enhanced_query(
-            question=request.question,
-            llm=llm,
-            qdrant_client=qdrant,
-            neo4j=neo4j_client,
-            top_k=request.top_k,
+        else:
+            if not neo4j_client:
+                # Fallback to vector search if Neo4j is not connected
+                logger.info("Neo4j not connected, falling back to vector query")
+                return await vector_only_query(
+                    question=request.question,
+                    llm=llm,
+                    qdrant_client=qdrant,
+                    top_k=request.top_k,
+                )
+            response = await graph_enhanced_query(
+                question=request.question,
+                llm=llm,
+                qdrant_client=qdrant,
+                neo4j=neo4j_client,
+                top_k=request.top_k,
+            )
+            return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error processing /query: %s", str(e))
+        err_msg = str(e)
+        if "RESOURCE_EXHAUSTED" in err_msg or "429" in err_msg or "quota" in err_msg.lower():
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API quota or rate limit reached (429 RESOURCE_EXHAUSTED). Please wait a few seconds before asking another question, or check your API key quota.",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Query error: {err_msg}",
         )
-        return response
 
 
 # ── Evaluation (optional endpoint) ────────────────────────────────────
