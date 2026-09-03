@@ -12,138 +12,68 @@ A high-performance **GraphRAG application** combining vector similarity search w
 
 ## 🏛️ System Architecture
 
-GraphRAG utilizes a zero-Docker, modular hybrid architecture that couples dense vector semantic search with structured graph traversal and reasoning.
+GraphRAG couples dense vector semantic search with structured knowledge graph traversal in a clean, modular architecture.
 
 ```mermaid
-flowchart TB
-    subgraph Client["🖥️ Presentation Layer (Modern Vanilla Web Dashboard)"]
-        UI["Web Dashboard\n(HTML5 / CSS3 / ES6+ JS)"]
-        VIS["Interactive Graph Arena\n(vis-network Physics Engine)"]
-        UPLOAD["Multi-File Dropzone\n(Batch .pdf, .txt, .md)"]
-        PROGRESS["Live Progress Tracker\n(Real-Time Chunks & Status)"]
+flowchart TD
+    subgraph Client["🖥️ Web Client"]
+        UI["Web Dashboard\n(HTML5 / CSS3 / Vanilla JS)"]
+        VIS["Interactive Graph Canvas\n(vis-network Physics)"]
         UI <--> VIS
-        UI <--> UPLOAD
-        UI <--> PROGRESS
     end
 
-    subgraph API["⚡ Application & Ingestion Layer (FastAPI)"]
-        ROUTER["REST API Controller\n(/upload, /query, /graph/*, /documents)"]
-        SEMAPHORE["Ingestion Semaphore Queue\n(asyncio.Semaphore Concurrency Control)"]
-        PARSER["Fault-Tolerant Document Parser\n(PyMuPDF with Per-Page Error Isolation)"]
-        CHUNKER["Semantic Sentence Chunker\n(SentenceSplitter with Page Tracking)"]
-        EXTRACTOR["Entity & Relation Extractor\n(Structured JSON Output Engine)"]
-        RESOLVER["Entity Resolution & Canonicalization\n(Name Normalization & Reference Merge)"]
-        RETRIEVER["Hybrid Graph-RAG Engine\n(Balanced Multi-Document Expansion)"]
+    subgraph Server["⚡ FastAPI Backend"]
+        API["API Controller\n(/upload, /query, /graph, /documents)"]
+        QUEUE["Background Worker Queue\n(asyncio.Semaphore = 1)"]
+        RAG["Hybrid Graph-RAG Engine\n(Vector Search + Graph Traversal)"]
+        API --> QUEUE
+        API <--> RAG
     end
 
-    subgraph Storage["💾 Multi-Model Storage Layer"]
-        SQLITE[("SQLite\ndata/graphrag.db\n(Metadata, Chunks, Progress)")]
-        QDRANT[("Embedded Qdrant\ndata/qdrant_db\n(Dense Chunk Vectors - 768d)")]
-        NEO4J[("Neo4j AuraDB Cloud\nneo4j+s://\n(Entities & Typed Relationships)")]
+    subgraph Data["💾 Storage & AI"]
+        SQLITE[("SQLite\n(Metadata & Progress)")]
+        QDRANT[("Qdrant\n(Dense Vectors)")]
+        NEO4J[("Neo4j AuraDB\n(Knowledge Graph)")]
+        LLM["Google Gemini / OpenAI\n(Embeddings & Generation)"]
     end
 
-    subgraph AI["🧠 AI & LLM Services"]
-        LLM["Google Gemini / OpenAI\n(gemini-2.5-flash / gpt-4o)"]
-        EMBED["Embedding Engine\n(gemini-embedding-001 / text-embedding-3)"]
-    end
-
-    %% Ingestion Pipeline Flow
-    UPLOAD ==>|Multipart Batch Upload| ROUTER
-    ROUTER --> SEMAPHORE
-    SEMAPHORE --> PARSER --> CHUNKER
-    CHUNKER -->|Store Chunks & Stats| SQLITE
-    CHUNKER -->|Generate Embeddings| EMBED
-    EMBED -->|Upsert Dense Vectors| QDRANT
-    CHUNKER -->|Text Chunks| EXTRACTOR
-    EXTRACTOR <==>|Structured JSON| LLM
-    EXTRACTOR --> RESOLVER
-    RESOLVER -->|Batched UNWIND Cypher| NEO4J
-
-    %% Query & Retrieval Flow
-    UI <==>|User Query & Retrieval Mode| ROUTER
-    ROUTER <==> RETRIEVER
-    RETRIEVER <==>|Top-K Dense Passages| QDRANT
-    RETRIEVER -->|Extract Chunk Entities| NEO4J
-    RETRIEVER <==>|Balanced Per-Doc Graph Facts| NEO4J
-    RETRIEVER <==>|Synthesized Context + Prompt| LLM
-    RETRIEVER -->|Answer + Citations + Subgraph| ROUTER
+    UI <==>|HTTP / REST| API
+    QUEUE --> SQLITE
+    QUEUE --> QDRANT
+    QUEUE --> NEO4J
+    RAG <==> QDRANT
+    RAG <==> NEO4J
+    RAG <==> LLM
+    QUEUE <==> LLM
 ```
 
 ---
 
 ## 🔄 End-to-End Workflow Flowchart
 
-The system runs on two unified, resilient pipelines: **Knowledge Graph Ingestion** and **Balanced Hybrid Retrieval**.
-
-### 1. Document Ingestion Pipeline Flowchart
+The system runs on two unified pipelines: **Document Ingestion** and **Balanced Hybrid Retrieval**.
 
 ```mermaid
 flowchart TD
-    Start([User Selects / Drops Multiple Files]) --> Upload[POST /upload Batch Endpoint]
-    Upload --> RegDB[Save to Disk & Insert Records in SQLite as 'processing']
-    RegDB --> UIRefresh[UI Immediately Displays Document Cards & Animated Progress Tracks]
-    
-    subgraph Queue["Background Pipeline Worker (asyncio.Semaphore = 1)"]
-        RegDB -.-> Worker[Worker Picks Document From Queue]
-        Worker --> ParseDoc[Parse Document with PyMuPDF]
-        ParseDoc -->|Corrupted Page Check| PageCheck{Page Corrupted?}
-        PageCheck -->|Yes| SkipPage[Log Warning & Continue Other Pages]
-        PageCheck -->|No| ExtractPageText[Extract Clean Page Text]
-        SkipPage --> SemanticChunk
-        ExtractPageText --> SemanticChunk[Split Into Sentence-Bounded Chunks]
-        
-        SemanticChunk --> InsertSQLite[Store Chunk Records in SQLite]
-        SemanticChunk --> EmbedChunks[Generate Embeddings via LLM Provider]
-        EmbedChunks --> IndexQdrant[Index Vectors in Local Embedded Qdrant]
-        
-        IndexQdrant --> ExtractEntities[Batch Extract Entities & Relationships via LLM]
-        ExtractEntities --> ProgressUpdate[Emit Live Progress: X/Y Chunks Processed]
-        ProgressUpdate --> ResolveEntities[Resolve & Canonicalize Entities]
-        ResolveEntities --> BatchCypher[Batched UNWIND Cypher Merge into Neo4j AuraDB]
-        BatchCypher --> MarkReady[Update Document Status to 'ready' in SQLite]
-    end
-    
-    MarkReady --> FinalUI[UI Updates to '✅ Ready' with Final Chunk Count]
-```
-
-### 2. Hybrid Graph-RAG Retrieval Flowchart (Balanced Multi-Document)
-
-```mermaid
-flowchart TD
-    QueryInput([User Enters Question in Web Chat]) --> QueryReq[POST /query with mode='graph' & top_k]
-    
-    subgraph ParallelSearch["Phase 1: Multi-Document Vector Search & Seed Discovery"]
-        QueryReq --> VectorSearch[Dense Vector Similarity Search in Qdrant]
-        VectorSearch --> TopKChunks[Retrieve Top-K Chunks with doc_ids & filenames]
-        
-        QueryReq --> ExtractSeeds[Extract Key Entities from User Question via LLM]
-        ExtractSeeds --> MatchGraphSeeds[Match Entities in Neo4j AuraDB]
-        
-        TopKChunks --> ChunkSeeds[Query Neo4j for Entities Linked to Retrieved chunk_ids]
-        MatchGraphSeeds --> MergeSeeds[Merge Question Seeds & Chunk Entities]
-        ChunkSeeds --> MergeSeeds
+    subgraph Ingestion["📥 1. Ingestion Pipeline"]
+        A["📄 Upload Files (.pdf, .txt, .md)"] --> B["✂️ Page-Safe Parsing & Chunking"]
+        B --> C[("🎯 Qdrant (Dense Vectors)")]
+        B --> D["🧠 Extract Entities & Relations (LLM)"]
+        D --> E["🧬 Entity Resolution & Deduplication"]
+        E --> F[("🌐 Neo4j AuraDB (Knowledge Graph)")]
     end
 
-    subgraph BalancedExpansion["Phase 2: Balanced Per-Document Graph Expansion"]
-        MergeSeeds --> GroupDoc[Partition Seeds by Contributing Document]
-        GroupDoc --> PerDocCheck{Multi-Document Query?}
-        
-        PerDocCheck -->|Yes| SubqueryExpansion["Execute Cypher with CALL (start) Subqueries\n(Allocate Even Quotas Across All Retrieved Documents)"]
-        PerDocCheck -->|No| SingleDocExpansion["Standard Bidirectional 2-Hop Traversal\n(Expand up to max_facts = 45)"]
-        
-        SubqueryExpansion --> CollectFacts[Collect Balanced Graph Facts: Source —[REL]→ Target]
-        SingleDocExpansion --> CollectFacts
+    subgraph Retrieval["🔍 2. Hybrid Retrieval Pipeline"]
+        Q["💬 User Question"] --> V["🎯 Vector Search (Top-K Chunks)"]
+        Q --> G["🌐 Graph Traversal (Multi-Doc Expansion)"]
+        C -.-> V
+        F -.-> G
+        V --> H["🧩 Hybrid Context Synthesis"]
+        G --> H
+        H --> AGI["🧠 Grounded LLM Generation"]
     end
 
-    subgraph AnswerGen["Phase 3: Hybrid Synthesis & Visualization"]
-        TopKChunks --> AssemblePrompt[Assemble Comprehensive Hybrid Prompt]
-        CollectFacts --> AssemblePrompt
-        AssemblePrompt --> LLMGen[Generate Grounded Answer via Gemini / OpenAI]
-        LLMGen --> ReturnPayload[Package Answer + Source Citations + Graph Subgraph]
-    end
-
-    ReturnPayload --> RenderChat[Render Markdown Answer with Collapsible Citations]
-    ReturnPayload --> RenderGraph[Render Interactive vis-network Force-Directed Graph]
+    AGI --> Out["✅ Grounded Answer + Citations + Interactive Graph"]
 ```
 
 ---
