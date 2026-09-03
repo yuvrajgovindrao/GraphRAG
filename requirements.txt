@@ -18,6 +18,8 @@ llama-index-core
 google-genai
 openai
 
-# Utilities
+# Utilities & Testing
 httpx
 python-multipart
+pytest
+pytest-asyncio

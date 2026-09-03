@@ -37,3 +37,8 @@ jobs:
       - name: Backend Architecture Smoke Test
         run: |
           python -c "from backend.config import get_settings; from backend.models import DocumentResponse, QueryRequest, QueryResponse; print('Architecture and models validated successfully.')"
+
+      - name: Run Pytest Suite
+        run: |
+          pytest -v
+

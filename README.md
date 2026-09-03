@@ -195,6 +195,12 @@ Open your browser and navigate to:
 > Always visit **[http://localhost:8000](http://localhost:8000)** (or **http://127.0.0.1:8000**) in your web browser.
 > *(Do not type `0.0.0.0` in browser address bars as browsers cannot resolve `0.0.0.0`).*
 
+### 5. Run Tests
+
+```bash
+pytest -v
+```
+
 ---
 
 ## 📖 API Endpoints
@@ -242,11 +248,13 @@ graphrag-app/
 │   └── evaluation/
 │       └── evaluator.py      # Evaluation & benchmarking runner
 ├── frontend/
-│   ├── index.html            # Single-page web application
+│   ├── index.html            # Single-Page web dashboard
 │   ├── css/
 │   │   └── style.css         # Modern dark glassmorphic styling
 │   └── js/
 │       └── app.js            # App logic & vis-network graph renderer
+├── tests/
+│   └── test_api.py           # Pytest suite (health, validation, chunker, models)
 ├── data/
 │   └── raw/                  # Uploaded document storage
 ├── eval/
