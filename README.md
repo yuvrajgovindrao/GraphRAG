@@ -10,6 +10,8 @@ A high-performance **GraphRAG application** combining vector similarity search w
 
 ---
 
+<img width="1919" height="990" alt="Screenshot 2026-09-03 141820" src="https://github.com/user-attachments/assets/910071b3-c7c4-4e40-a98a-b0ba29330984" />
+
 ## 🏛️ System Architecture
 
 GraphRAG couples dense vector semantic search with structured knowledge graph traversal in a clean, modular architecture.
